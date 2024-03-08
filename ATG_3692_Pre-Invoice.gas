@@ -1,0 +1,114 @@
+Program.Sub.ScreenSU.Start
+gui.Form1..create
+gui.Form1..caption("Invoice Condition")
+gui.Form1..size(2655,2595)
+gui.Form1..position(0,0)
+gui.Form1..event(unload,form1_unload)
+gui.Form1..alwaysontop(False)
+gui.Form1..fontname("Arial")
+gui.Form1..fontsize(8)
+gui.Form1..forecolor(0)
+gui.Form1..fontstyle(,,,,)
+gui.Form1..BackColor(-2147483633)
+gui.Form1..controlbox(True)
+gui.Form1..maxbutton(True)
+gui.Form1..minbutton(True)
+gui.Form1..mousepointer(0)
+gui.Form1..moveable(True)
+gui.Form1..sizeable(True)
+gui.Form1..ShowInTaskBar(True)
+gui.Form1..titlebar(True)
+gui.Form1.lbl1.create(label,"Update ORDER_HIST_LINE after Invoice:",True,2220,495,0,200,200,True,0,Arial,8,-2147483633,0)
+gui.Form1.txtInvoice.create(textbox,"",True,1215,300,0,515,790,True,0,Arial,8,-2147483643,1)
+gui.Form1.txtInvoice.maxLength(7)
+gui.Form1.cmdGo.create(button)
+gui.Form1.cmdGo.caption("Go")
+gui.Form1.cmdGo.visible(True)
+gui.Form1.cmdGo.size(855,375)
+gui.Form1.cmdGo.zorder(0)
+gui.Form1.cmdGo.position(700,1300)
+gui.Form1.cmdGo.enabled(True)
+gui.Form1.cmdGo.fontname("Arial")
+gui.Form1.cmdGo.fontsize(8)
+gui.Form1.cmdGo.event(click,cmdgo_click)
+
+
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+' 3/10/2021
+' JSO
+' For House of Doolittle quote 1181
+' Pre-invoice data manipulation
+' hook 34620
+
+
+Function.ODBC.Connection!con.OpenConnection(Variable.Ambient.PDSN,Variable.Ambient.PUser,Variable.Ambient.PPass,360)
+
+Gui.Form1..Show
+
+
+Program.Sub.Main.End
+
+program.sub.form1_unload.start
+Function.Intrinsic.Control.End
+
+program.sub.form1_unload.end
+
+program.sub.cmdgo_click.start
+Variable.Local.sSQL.Declare(String)
+Variable.Local.sPart.Declare(String)
+Variable.Local.sLocation.Declare(String)
+Variable.Local.sBarcode.Declare(String)
+Variable.Local.sTextInfo.Declare(String)
+Variable.Local.sCRShape.Declare(String)
+Variable.local.sInvoice.Declare(String)
+
+V.Local.sInvoice.Set(V.Screen.Form1!txtInvoice.Text)
+Gui.Form1.cmdGo.Enabled(false)
+
+Variable.Local.sSQL.Set("UPDATE ORDER_HEADER SET BUY_GRP_CUST_NO = (SELECT DISTINCT BUYING_GROUP.GROUP_CUST FROM BUYING_GROUP WHERE BUYING_GROUP.CUSTOMER = ORDER_HEADER.CUSTOMER) WHERE ORDER_HEADER.RECORD_TYPE = 'A' AND BUY_GRP_CUST_NO = ''")
+Function.odbc.connection!con.execute(Variable.local.sSQL)
+
+' 5/20/10 Added the clause for invoice grabbed from the form to avoid timeouts
+'Variable.local.sSQL.set("UPDATE ORDER_HIST_LINE SET BUY_GRP_CUSTOMER = (SELECT ORDER_HIST_HEAD.BUY_GROUP_CUST FROM ORDER_HIST_HEAD WHERE ORDER_HIST_HEAD.INVOICE = ORDER_HIST_LINE.INVOICE AND ORDER_HIST_HEAD.ORDER_NO = ORDER_HIST_LINE.ORDER_NO AND ORDER_HIST_HEAD.ORDER_SUFFIX = ORDER_HIST_LINE.ORDER_SUFFIX AND ORDER_HIST_HEAD.BUY_GROUP_CUST <> '') WHERE BUY_GRP_CUSTOMER = ''")
+Function.Intrinsic.String.Concat("UPDATE ORDER_HIST_LINE SET BUY_GRP_CUSTOMER = (SELECT ORDER_HIST_HEAD.BUY_GROUP_CUST FROM ORDER_HIST_HEAD WHERE ORDER_HIST_HEAD.INVOICE = ORDER_HIST_LINE.INVOICE AND ORDER_HIST_HEAD.ORDER_NO = ORDER_HIST_LINE.ORDER_NO AND ORDER_HIST_HEAD.ORDER_SUFFIX = ORDER_HIST_LINE.ORDER_SUFFIX AND ORDER_HIST_HEAD.BUY_GROUP_CUST <> '') WHERE BUY_GRP_CUSTOMER = '' AND INVOICE > '",V.local.sInvoice,"'",V.Local.sSQL)
+Function.odbc.connection!con.execute(Variable.local.sSQL)
+
+Variable.Local.sSQL.Set("SELECT PART, LOCATION, USER_1 FROM ORDER_LINES WHERE RECORD_TYPE = 'L' ORDER BY ORDER_NO")
+Function.ODBC.Connection!con.OpenRecordsetRW("rst1",V.Local.sSQL)
+Function.Intrinsic.Control.DoUntil(V.ODBC.con!rst1.EOF,=,True)
+	V.Local.sPart.Set(V.ODBC.con!rst1.FieldVal!PART)
+	V.Local.sLocation.Set(V.ODBC.con!rst1.FieldVal!LOCATION)
+	Function.intrinsic.string.concat("SELECT TEXT_INFO1, CODE_RM_SHAPE FROM V_INVENTORY_MSTR A, V_INVENTORY_MST2 B WHERE A.PART = B.PART AND A.LOCATION = B.LOCATION AND PRODUCT_LINE BETWEEN '01' AND '07' AND PART = '",V.local.sPart,"' AND LOCATION = '",V.local.sLocation,"'",V.local.sSqL)
+	Function.ODBC.Connection!con.openrecordsetRO("rst2",V.Local.sSQL)
+	Function.Intrinsic.Control.If(V.ODBC.con!rst2.EOF,<>,True)
+		V.local.sTextInfo.set(V.odbc.con!rst2.fieldval!TEXT_INFO1)
+		V.Local.sCRShape.Set(V.ODBC.con!rst2.FieldVal!CODE_RM_SHAPE)
+		Function.Intrinsic.String.Concat("040983",V.Local.sTextInfo.Trim,V.Local.sCRShape.Trim,V.Local.sBarcode)
+		Function.ODBC.con!rst1.Set!USER_1(V.Local.sBarcode)
+		Function.ODBC.con!rst1.Update
+	Function.Intrinsic.Control.Else
+		V.Local.sTextInfo.Set("")
+		V.Local.sCRShape.Set("")
+	Function.Intrinsic.control.endif
+	Function.ODBC.con!rst2.Close
+	Function.ODBC.con!rst1.MoveNext
+Function.Intrinsic.Control.Loop
+
+Function.ODBC.con!rst1.Close
+
+Function.intrinsic.Control.End
+
+program.sub.cmdgo_click.end
+
+Program.Sub.Comments.Start
+${$0$}$ATG_3692_Pre-Invoice$}$JCT$}$4/5/2016
+${$1$}$$}$$}$0$}$34620$}$Pre OK$}$4/5/2016 1:44:07 PM$}$(Program: ORD100; Screen: OES0100A)
+
+Program.Sub.Comments.End
+
